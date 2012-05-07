@@ -27,6 +27,8 @@
             <configuration>
               <!-- The directory where the DTO classes will be generated, default value is target/generated-sources -->
               <generatedDirectory>target/generated</generatedDirectory>
+              <!-- The package where the DTO classes will be generated -->
+              <generatedPackage>target/generated</generatedPackage>
               <!-- The list of classes you want to generate DTO classes for. -->
               <includes>
                 <include>fr.package.Bean</include>

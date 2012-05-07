@@ -42,4 +42,6 @@ public interface DTOGenerator {
 	 *            the directory.
 	 */
 	void setGeneratedDirectory(File generatedDirectory);
+
+    void setGeneratedPackage(String generatedPackage);
 }
