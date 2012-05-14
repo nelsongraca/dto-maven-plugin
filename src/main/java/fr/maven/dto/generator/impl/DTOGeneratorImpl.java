@@ -84,7 +84,15 @@ public class DTOGeneratorImpl implements DTOGenerator {
     @Override
     public void generateDTO(final Class<?> clazz) throws IOException {
         this.makeDTOPackage(clazz);
-        this.makeDTOClass(clazz);
+        if (clazz.isEnum()) {
+            final FileWriter fw = this.getDTOClassFileWriter(clazz);
+
+            this.makeDTOEnum(clazz, fw);
+        }
+        else {
+            final FileWriter fw = this.getDTOClassFileWriter(clazz);
+            this.makeDTOClass(clazz, fw);
+        }
         this.getDTOClassFileWriter(clazz).close();
     }
 
@@ -138,19 +146,7 @@ public class DTOGeneratorImpl implements DTOGenerator {
      * @return the type.
      */
     protected String getDTOFieldType(final Class<?> clazz, final Field field) {
-        String dtoFieldType = this.getDTOType(clazz, field.getGenericType());
-        if (dtoFieldType.lastIndexOf(".") + 1 > 0) {
-            //we have to remove the generics part when it exists
-            if (dtoFieldType.contains("<")) {
-                this.additionalImports.add(dtoFieldType.substring(0, dtoFieldType.indexOf("<")));
-            }
-            else {
-                this.additionalImports.add(dtoFieldType);
-            }
-            dtoFieldType = dtoFieldType.substring(dtoFieldType.lastIndexOf(".") + 1);
-
-        }
-        return dtoFieldType;
+        return this.getDTOType(clazz, field.getGenericType());
     }
 
     /**
@@ -163,11 +159,11 @@ public class DTOGeneratorImpl implements DTOGenerator {
     protected String getDTOType(final Class<?> clazz, final Type type) {
         final StringBuffer typeSimpleName = new StringBuffer();
         typeSimpleName.append(this.getDTOFieldPackage(clazz, type));
+
         if (type instanceof ParameterizedType) {
             final ParameterizedType parameterizedType = (ParameterizedType) type;
             typeSimpleName.append(((Class<?>) parameterizedType.getRawType()).getSimpleName() + "<");
-            final Type[] typeArguments = parameterizedType
-                    .getActualTypeArguments();
+            final Type[] typeArguments = parameterizedType.getActualTypeArguments();
             for (int i = 0; i < typeArguments.length; i++) {
                 typeSimpleName.append(this.getDTOType(clazz, typeArguments[i]));
                 if (i != (typeArguments.length - 1)) {
@@ -179,8 +175,7 @@ public class DTOGeneratorImpl implements DTOGenerator {
         else {
             final Class<?> clazzType = ((Class<?>) type);
             if (clazzType.isArray()) {
-                typeSimpleName.append(this.getArrayComponentType(clazzType)
-                        .getSimpleName());
+                typeSimpleName.append(this.getArrayComponentType(clazzType).getSimpleName());
                 for (int i = 0; i < this.getArrayDimension(clazzType); i++) {
                     typeSimpleName.append("[]");
                 }
@@ -234,13 +229,11 @@ public class DTOGeneratorImpl implements DTOGenerator {
      * @param fieldType the field type we want to know its DTO package.
      * @return the type.
      */
-    protected String getDTOFieldPackage(final Class<?> clazz,
-                                        final Type fieldType) {
+    protected String getDTOFieldPackage(final Class<?> clazz, final Type fieldType) {
         Class<?> fieldTypeClass;
         Package fieldPackage;
         if (fieldType instanceof ParameterizedType) {
-            fieldTypeClass = ((Class<?>) ((ParameterizedType) fieldType)
-                    .getRawType());
+            fieldTypeClass = ((Class<?>) ((ParameterizedType) fieldType).getRawType());
         }
         else {
             fieldTypeClass = (Class<?>) fieldType;
@@ -252,10 +245,12 @@ public class DTOGeneratorImpl implements DTOGenerator {
         String result = "";
         if (fieldPackage != null && !"java.lang".equals(fieldPackage.getName())) {
             if (this.isClassToGenerate(fieldTypeClass)) {
-                if (!clazz.getPackage().getName()
-                        .equals(fieldTypeClass.getPackage().getName())) {
+                if (!clazz.getPackage().getName().equals(fieldTypeClass.getPackage().getName())) {
                     result = this.getDTOPackage(fieldTypeClass) + ".";
                 }
+            }
+            else if (fieldTypeClass.getDeclaringClass() != null) {
+                result = "";
             }
             else {
                 result = fieldTypeClass.getPackage().getName() + ".";
@@ -293,45 +288,52 @@ public class DTOGeneratorImpl implements DTOGenerator {
         }
     }
 
+
+    protected void makeDTOClass(final Class<?> clazz, FileWriter fw) throws IOException {
+        makeDTOClass(clazz, fw, "DTO", true);
+    }
+
+
     /**
      * Write class part in the DTO generation file.
      *
      * @param clazz the clazz we want a DTO for.
      * @throws IOException if the file is not writable.
      */
-    protected void makeDTOClass(final Class<?> clazz) throws IOException {
-        final FileWriter fw = this.getDTOClassFileWriter(clazz);
-        fw.write("package " + this.getDTOPackage(clazz) + ";" + "\n\n");
-        fw.write("import java.io.Serializable;\n\n");
 
+    protected void makeDTOClass(final Class<?> clazz, FileWriter fw, String nameToAppend, boolean writeHeader) throws IOException {
+        if (writeHeader) {
+            fw.write("package " + this.getDTOPackage(clazz) + ";" + "\n\n");
+            fw.write("import java.io.Serializable;\n\n");
+        }
         //make params into string buffer so we can have the data types for additional imports
         StringBuffer stringBuffer = new StringBuffer();
-        for (final Field field : clazz.getDeclaredFields()) {
+        for (final Field field : getDeclaredFields(clazz)) {
             if (!Modifier.isStatic(field.getModifiers())) {
                 stringBuffer.append(this.makeDTOField(clazz, field));
             }
         }
-
-        for (String pack : additionalImports) {
-            fw.write("import " + pack + ";\n");
+        if (writeHeader) {
+            for (String pack : additionalImports) {
+                fw.write("import " + pack + ";\n");
+            }
         }
-
 
         fw.write("/**\n");
         fw.write(" * This class was generated by the DTO Maven Plugin.\n");
         fw.write(" * " + new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date()) + "\n");
         fw.write(" */\n");
-        fw.write("public class " + clazz.getSimpleName() + "DTO implements Serializable {\n\n");
-        fw.write("\tprivate static final long serialVersionUID = 1L;\n\n");
+        fw.write(this.getClassModifiers(clazz) + "class " + clazz.getSimpleName() + nameToAppend + " implements Serializable {\n\n");
+        fw.write("    private static final long serialVersionUID = 1L;\n\n");
 
         //now write SB
         fw.write(stringBuffer.toString());
 
 
         //make constructor with all parameters
-        fw.write("\tpublic " + clazz.getSimpleName() + "DTO(");
+        fw.write("    public " + clazz.getSimpleName() + nameToAppend + "(");
         boolean first = true;
-        for (final Field field : clazz.getDeclaredFields()) {
+        for (final Field field : getDeclaredFields(clazz)) {
             if (!Modifier.isStatic(field.getModifiers())) {
                 if (first) {
                     first = false;
@@ -344,20 +346,96 @@ public class DTOGeneratorImpl implements DTOGenerator {
         }
 
         fw.write(") {\n");
-        for (final Field field : clazz.getDeclaredFields()) {
+        for (final Field field : getDeclaredFields(clazz)) {
             if (!Modifier.isStatic(field.getModifiers())) {
-                fw.write("\t\tthis." + field.getName() + " = " + field.getName() + ";\n");
+                fw.write("        this." + field.getName() + " = " + field.getName() + ";\n");
             }
         }
-        fw.write("\t}\n\n");
+        fw.write("    }\n\n");
 
-        for (final Field field : clazz.getDeclaredFields()) {
+        for (final Field field : getDeclaredFields(clazz)) {
             if (!Modifier.isStatic(field.getModifiers())) {
-                this.makeDTOFieldGetter(clazz, field);
-                this.makeDTOFieldSetter(clazz, field);
+                this.makeDTOFieldGetter(clazz, field, fw);
+                this.makeDTOFieldSetter(clazz, field, fw);
+            }
+        }
+
+        Class<?>[] clazzes = clazz.getDeclaredClasses();
+        for (Class<?> clazze : clazzes) {
+            if (clazze.isEnum()) {
+                makeDTOEnum(clazze, fw, "", false);
+            }
+            else {
+                makeDTOClass(clazze, fw, "", false);
             }
         }
         fw.write("}");
+    }
+
+    private String getClassModifiers(Class<?> clazz) {
+        int modifiers = clazz.getModifiers();
+        StringBuilder stringBuilder = new StringBuilder();
+
+        if (Modifier.isPublic(modifiers)) {stringBuilder.append("public ");}
+        if (Modifier.isProtected(modifiers)) {stringBuilder.append("protected ");}
+        if (Modifier.isPrivate(modifiers)) {stringBuilder.append("private ");}
+        if (Modifier.isFinal(modifiers) && !clazz.isEnum()) {stringBuilder.append("final ");}
+        if (Modifier.isInterface(modifiers)) {stringBuilder.append("interface ");}
+        if (Modifier.isNative(modifiers)) {stringBuilder.append("native ");}
+        if (Modifier.isStatic(modifiers)) {stringBuilder.append("static ");}
+        if (Modifier.isStrict(modifiers)) {stringBuilder.append("strict ");}
+        if (Modifier.isSynchronized(modifiers)) {stringBuilder.append("synchronized ");}
+        if (Modifier.isTransient(modifiers)) {stringBuilder.append("transient ");}
+        if (Modifier.isVolatile(modifiers)) {stringBuilder.append("volatile ");}
+
+        return stringBuilder.toString();
+    }
+
+
+    private List<Field> getDeclaredFields(Class<?> clazz) {
+
+        Field[] declaredFields = clazz.getDeclaredFields();
+        List<Field> ret = new ArrayList<Field>();
+        for (Field declaredField : declaredFields) {
+            if (declaredField.getDeclaringClass().getDeclaringClass() != null) {
+                if (!declaredField.getDeclaringClass().getDeclaringClass().equals(declaredField.getType())) {
+                    ret.add(declaredField);
+                }
+            }
+            else {
+                ret.add(declaredField);
+            }
+
+        }
+        return ret;
+    }
+
+    protected void makeDTOEnum(final Class<?> clazz, FileWriter fw) throws IOException {
+        makeDTOEnum(clazz, fw, "DTO", true);
+    }
+
+    /**
+     * Write class part in the DTO generation file.
+     *
+     * @param clazz the clazz we want a DTO for.
+     * @throws IOException if the file is not writable.
+     */
+    protected void makeDTOEnum(final Class<?> clazz, FileWriter fw, String nameToAppend, boolean writeHeader) throws IOException {
+        if (writeHeader) {
+            fw.write("package " + this.getDTOPackage(clazz) + ";" + "\n\n");
+            fw.write("import java.io.Serializable;\n\n");
+        }
+        fw.write("/**\n");
+        fw.write(" * This class was generated by the DTO Maven Plugin.\n");
+        fw.write(" * " + new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date()) + "\n");
+        fw.write(" */\n");
+        fw.write(getClassModifiers(clazz) + "enum " + clazz.getSimpleName() + nameToAppend + " implements Serializable {\n\n");
+
+
+        for (Object o : clazz.getEnumConstants()) {
+            fw.write("    " + o.toString() + ",\n");
+        }
+        fw.write("\n}");
     }
 
     /**
@@ -371,10 +449,10 @@ public class DTOGeneratorImpl implements DTOGenerator {
     protected String makeDTOField(final Class<?> clazz, final Field field) throws IOException {
         StringBuffer stringBuffer = new StringBuffer();
         final String fieldType = this.getDTOFieldType(clazz, field);
-        stringBuffer.append("\t/**\n");
-        stringBuffer.append("\t * @see " + clazz.getCanonicalName() + "#" + field.getName() + "\n");
-        stringBuffer.append("\t */\n");
-        stringBuffer.append("\tprivate " + fieldType + " " + field.getName() + ";\n\n");
+        stringBuffer.append("    /**\n");
+        stringBuffer.append("     * @see " + clazz.getCanonicalName() + "#" + field.getName() + "\n");
+        stringBuffer.append("     */\n");
+        stringBuffer.append("    private " + fieldType + " " + field.getName() + ";\n\n");
         return stringBuffer.toString();
     }
 
@@ -385,9 +463,8 @@ public class DTOGeneratorImpl implements DTOGenerator {
      * @param field the field we want to write the part for.
      * @throws IOException if the file is not writable.
      */
-    protected void makeDTOFieldGetter(final Class<?> clazz, final Field field)
+    protected void makeDTOFieldGetter(final Class<?> clazz, final Field field, FileWriter fw)
             throws IOException {
-        final FileWriter fw = this.getDTOClassFileWriter(clazz);
         String methodSignature;
         final char firstFieldNameCharacterUpper = Character.toUpperCase(field.getName().charAt(0));
         String fieldNameWithoutFirstCharacter = "";
@@ -401,14 +478,13 @@ public class DTOGeneratorImpl implements DTOGenerator {
 
             methodSignature = "get" + firstFieldNameCharacterUpper + fieldNameWithoutFirstCharacter;
         }
-        fw.write("\t/**\n");
-        fw.write("\t * @see " + clazz.getCanonicalName() + "#"
-                + methodSignature + "()\n");
-        fw.write("\t */\n");
-        fw.write("\tpublic " + this.getDTOFieldType(clazz, field) + " "
+        fw.write("    /**\n");
+        fw.write("     * @see " + clazz.getCanonicalName() + "#" + methodSignature + "()\n");
+        fw.write("     */\n");
+        fw.write("    public " + this.getDTOFieldType(clazz, field) + " "
                 + methodSignature + "() {\n");
-        fw.write("\t\treturn this." + field.getName() + ";\n");
-        fw.write("\t}\n\n");
+        fw.write("        return this." + field.getName() + ";\n");
+        fw.write("    }\n\n");
     }
 
     /**
@@ -418,8 +494,7 @@ public class DTOGeneratorImpl implements DTOGenerator {
      * @param field the field we want to write the part for.
      * @throws IOException if the file is not writable.
      */
-    protected void makeDTOFieldSetter(final Class<?> clazz, final Field field) throws IOException {
-        final FileWriter fw = this.getDTOClassFileWriter(clazz);
+    protected void makeDTOFieldSetter(final Class<?> clazz, final Field field, FileWriter fw) throws IOException {
 
         final char firstFieldNameCharacterUpper = Character.toUpperCase(field.getName().charAt(0));
         String fieldNameWithoutFirstCharacter = "";
@@ -427,13 +502,13 @@ public class DTOGeneratorImpl implements DTOGenerator {
             fieldNameWithoutFirstCharacter = field.getName().substring(1);
         }
         final String methodSignature = "set" + firstFieldNameCharacterUpper + fieldNameWithoutFirstCharacter;
-        fw.write("\t/**\n");
-        fw.write("\t * @see " + clazz.getCanonicalName() + "#" + methodSignature + "(" + field.getType().getSimpleName() + ")\n");
-        fw.write("\t */\n");
+        fw.write("    /**\n");
+        fw.write("     * @see " + clazz.getCanonicalName() + "#" + methodSignature + "(" + field.getType().getSimpleName() + ")\n");
+        fw.write("     */\n");
 
 
-        fw.write("\tpublic void " + methodSignature + "(" + this.getDTOFieldType(clazz, field) + " " + field.getName() + ") {\n");
-        fw.write("\t\tthis." + field.getName() + " = " + field.getName() + ";\n");
-        fw.write("\t}\n\n");
+        fw.write("    public void " + methodSignature + "(" + this.getDTOFieldType(clazz, field) + " " + field.getName() + ") {\n");
+        fw.write("        this." + field.getName() + " = " + field.getName() + ";\n");
+        fw.write("    }\n\n");
     }
 }
