@@ -345,29 +345,30 @@ public class DTOGeneratorImpl implements DTOGenerator {
         //make a no args constructor
         fw.write("    public " + clazz.getSimpleName() + nameToAppend + "() { }\n\n");
 
-        //make constructor with all parameters
-        fw.write("    public " + clazz.getSimpleName() + nameToAppend + "(");
-        boolean first = true;
-        for (final Field field : getDeclaredFields(clazz)) {
-            if (!Modifier.isStatic(field.getModifiers())) {
-                if (first) {
-                    first = false;
+        if (getDeclaredFields(clazz).size() > 0) {
+            //make constructor with all parameters
+            fw.write("    public " + clazz.getSimpleName() + nameToAppend + "(");
+            boolean first = true;
+            for (final Field field : getDeclaredFields(clazz)) {
+                if (!Modifier.isStatic(field.getModifiers())) {
+                    if (first) {
+                        first = false;
+                    }
+                    else {
+                        fw.write(", ");
+                    }
+                    fw.write(this.getDTOFieldType(clazz, field) + " " + field.getName());
                 }
-                else {
-                    fw.write(", ");
+            }
+
+            fw.write(") {\n");
+            for (final Field field : getDeclaredFields(clazz)) {
+                if (!Modifier.isStatic(field.getModifiers())) {
+                    fw.write("        this." + field.getName() + " = " + field.getName() + ";\n");
                 }
-                fw.write(this.getDTOFieldType(clazz, field) + " " + field.getName());
             }
+            fw.write("    }\n\n");
         }
-
-        fw.write(") {\n");
-        for (final Field field : getDeclaredFields(clazz)) {
-            if (!Modifier.isStatic(field.getModifiers())) {
-                fw.write("        this." + field.getName() + " = " + field.getName() + ";\n");
-            }
-        }
-        fw.write("    }\n\n");
-
         for (final Field field : getDeclaredFields(clazz)) {
             if (!Modifier.isStatic(field.getModifiers())) {
                 this.makeDTOFieldGetter(clazz, field, fw);
