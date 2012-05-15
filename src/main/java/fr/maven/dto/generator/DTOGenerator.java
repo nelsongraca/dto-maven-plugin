@@ -44,4 +44,6 @@ public interface DTOGenerator {
 	void setGeneratedDirectory(File generatedDirectory);
 
     void setGeneratedPackage(String generatedPackage);
+
+    void setExtraInterfaces(List<String> extraInterfaces);
 }

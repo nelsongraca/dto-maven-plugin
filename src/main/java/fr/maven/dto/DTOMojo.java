@@ -48,6 +48,12 @@ public class DTOMojo extends AbstractMojo {
      */
     private String generatedPackage;
 
+
+    /**
+     * @parameter expression="${extraInterfaces}"
+     */
+    private List<String> extraInterfaces;
+
     /**
      * List of pattern classes we want to generate DTO for match.
      *
@@ -81,7 +87,7 @@ public class DTOMojo extends AbstractMojo {
             final DTOLauncher dtoLauncher = new DTOLauncher();
             dtoLauncher.execute(this.getClassLoader(),
                     this.getBaseDirectories(), this.includes, this.excludes,
-                    this.generatedDirectory, this.generatedPackage);
+                    this.generatedDirectory, this.generatedPackage,this.extraInterfaces);
             this.getLog().debug("dto-maven-plugin finished the generation.");
             this.project.addCompileSourceRoot(this.generatedDirectory
                     .getAbsolutePath());

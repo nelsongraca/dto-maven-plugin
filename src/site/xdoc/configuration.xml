@@ -34,6 +34,9 @@
                 <include>fr.package.Bean</include>
                 <include>fr.package.**.AnotherBean</include>
               </includes>
+              <extraInterfaces>
+                <extraInterface>my.interface</extraInterface>
+              </extraInterfaces>
             </configuration>
           </execution>
         </executions>

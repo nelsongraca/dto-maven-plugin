@@ -41,6 +41,7 @@ public class DTOLauncher {
      * Run the generation.
      *
      *
+     *
      * @param classLoader        the ClassLoader that contains classes to generate.
      * @param baseDirectories    the directories or archives that contains classes to generate
      *                           DTO for.
@@ -48,17 +49,19 @@ public class DTOLauncher {
      * @param excludes           patterns that classes to generate do not match.
      * @param generatedDirectory the directory where DTOs will be generated.
      * @param generatedPackage
+     * @param extraInterfaces
      * @throws ClassNotFoundException if the classes found in directories have not been found. This
      *                                should not happened.
      * @throws IOException            if DTOs can not be written.
      */
     public void execute(final ClassLoader classLoader,
                         final List<File> baseDirectories, final List<String> includes,
-                        final List<String> excludes, final File generatedDirectory, String generatedPackage)
+                        final List<String> excludes, final File generatedDirectory, String generatedPackage, List<String> extraInterfaces)
             throws ClassNotFoundException, IOException {
         List<Class<?>> classesToGenerate = this.classFinder.getClassesToGenerate(classLoader, baseDirectories, includes, excludes);
         this.dtoGenerator.setGeneratedDirectory(generatedDirectory);
         this.dtoGenerator.setGeneratedPackage(generatedPackage);
+        this.dtoGenerator.setExtraInterfaces(extraInterfaces);
         this.dtoGenerator.generateDTOs(classesToGenerate);
     }
 }
